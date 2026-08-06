@@ -89,8 +89,7 @@ class Approval(Base):
 def make_session(url: str | None = None):
     # Prod: DATABASE_URL (Postgres, from the host). Local: a sqlite file.
     url = url or os.environ.get("DATABASE_URL") or "sqlite:///dailyledger.db"
-    if url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql://", 1)  # SQLAlchemy driver name
+    if url.startswith("postgres"): url = "postgresql+psycopg://" + url.split("://", 1)[1]
     engine = create_engine(url, echo=False, pool_pre_ping=True)
     Base.metadata.create_all(engine)
     return sessionmaker(engine, expire_on_commit=False)

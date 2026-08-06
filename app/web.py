@@ -28,6 +28,26 @@ def health():
     return {"ok": True}
 
 
+@app.get("/setup", response_class=HTMLResponse)
+def setup():
+    """One-time bootstrap: ensure the EverBean org row exists, then offer connect links.
+    (The deployed instance has no seed step; this stands in for `python -m app.demo`.)"""
+    s = Session()
+    org = s.query(Org).filter_by(name="EverBean Coffee Co").first()
+    if not org:
+        org = Org(name="EverBean Coffee Co", timezone="America/Denver",
+                  posting_format="journal_entry", rollout_mode="draft_approve")
+        s.add(org); s.commit()
+    return HTMLResponse(
+        f"<div style='font-family:system-ui,Arial,sans-serif;max-width:560px;margin:40px auto'>"
+        f"<h2 style='margin-bottom:4px'>Org ready</h2>"
+        f"<p style='color:#555'>{org.name} &middot; id {org.id} &middot; "
+        f"{org.posting_format} &middot; {org.rollout_mode}</p>"
+        f"<p><a href='/connect/qbo?org_id={org.id}'>Connect QuickBooks &rarr;</a></p>"
+        f"<p><a href='/connect/square?org_id={org.id}'>Connect Square &rarr;</a></p>"
+        f"<p style='margin-top:24px'><a href='/'>Dashboard</a></p></div>")
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
     s = Session()

@@ -225,3 +225,24 @@ def connect_square(org_id: int):
     q = {"client_id": SQUARE.CLIENT_ID, "scope": SQUARE.SCOPE,
          "session": "false", "redirect_uri": SQUARE.REDIRECT_URI, "state": state}
     return RedirectResponse(f"{SQUARE.AUTHORIZE}?{urllib.parse.urlencode(q)}")
+
+
+@app.get("/callback/square")
+def callback_square(request: Request, code: str = "", state: str = "", error: str = ""):
+    """Square redirects here after approval: exchange the code for an access token,
+    resolve the seller's location, and store the encrypted Connection."""
+    if error:
+        return HTMLResponse(f"<p>Square declined: {error}</p><p><a href='/'>Back</a></p>", status_code=400)
+    org_id = _pending_state.pop(state, None)
+    if org_id is None:
+        return HTMLResponse("<p>Invalid or expired state.</p>", status_code=400)
+    try:
+        tok = connect.square_exchange_code(code)
+        loc = connect.square_first_location(tok["access_token"])
+        connect.save_square_connection(Session(), org_id, tok, loc)
+    except Exception as e:
+        return HTMLResponse(
+            f"<div style='font-family:system-ui;max-width:640px;margin:40px auto'>"
+            f"<h2>Square connect failed</h2><pre style='background:#fdecec;padding:12px'>{type(e).__name__}: {e}</pre>"
+            f"<p><a href='/'>&larr; Back to dashboard</a></p></div>", status_code=400)
+    return RedirectResponse("/", status_code=303)

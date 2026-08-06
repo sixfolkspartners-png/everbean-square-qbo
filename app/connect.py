@@ -111,3 +111,51 @@ def save_qbo_connection(session, org_id: int, realm: str, token_json: dict, acco
     conn.status = "connected"
     session.commit()
     return conn
+
+
+# ------------- Square OAuth: token exchange + connection -------------
+SQUARE_API = {"production": "https://connect.squareup.com",
+              "sandbox": "https://connect.squareupsandbox.com"}
+SQUARE_VERSION = "2024-07-17"
+
+
+def square_exchange_code(code: str) -> dict:
+    """Exchange the OAuth authorization code for a Square access token."""
+    from .settings import SQUARE
+    base = SQUARE_API.get(SQUARE.ENV, SQUARE_API["production"])
+    r = requests.post(f"{base}/oauth2/token", timeout=60,
+                      headers={"Content-Type": "application/json", "Square-Version": SQUARE_VERSION},
+                      json={"client_id": SQUARE.CLIENT_ID, "client_secret": SQUARE.CLIENT_SECRET,
+                            "code": code, "grant_type": "authorization_code",
+                            "redirect_uri": SQUARE.REDIRECT_URI})
+    r.raise_for_status()
+    return r.json()  # access_token, refresh_token, merchant_id, expires_at, ...
+
+
+def square_first_location(access_token: str) -> str:
+    """Pick the seller's main active location id (the pipeline pulls per location)."""
+    from .settings import SQUARE
+    base = SQUARE_API.get(SQUARE.ENV, SQUARE_API["production"])
+    r = requests.get(f"{base}/v2/locations", timeout=60,
+                     headers={"Authorization": f"Bearer {access_token}", "Square-Version": SQUARE_VERSION})
+    r.raise_for_status()
+    locs = r.json().get("locations", [])
+    active = [l for l in locs if l.get("status") == "ACTIVE"] or locs
+    return active[0]["id"] if active else ""
+
+
+def save_square_connection(session, org_id: int, token_json: dict, location_id: str):
+    from .models import Connection
+    from .settings import SQUARE
+    conn = session.query(Connection).filter_by(org_id=org_id, provider="square").first()
+    if not conn:
+        conn = Connection(org_id=org_id, provider="square"); session.add(conn)
+    conn.environment = SQUARE.ENV
+    conn.realm_or_location = location_id
+    conn.client_id = SQUARE.CLIENT_ID
+    conn.client_secret = vault.encrypt(SQUARE.CLIENT_SECRET)
+    # the pipeline reads refresh_token_enc as the Square Bearer token
+    conn.refresh_token_enc = vault.encrypt(token_json["access_token"])
+    conn.status = "connected"
+    session.commit()
+    return conn

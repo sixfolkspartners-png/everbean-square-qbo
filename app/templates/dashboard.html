@@ -2,32 +2,62 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>DailyLedger</title>
 <style>
 :root{--ink:#0b0b0b;--ink2:#52514e;--muted:#8a8a84;--line:#e6e6e4;--brand:#12314f;
---accent:#2a78d6;--good:#0a7a15;--good-bg:#e8f6e8;--warn:#b7791f;--warn-bg:#fdf3dd;--page:#f4f4f2;--card:#fff}
+--accent:#2a78d6;--good:#0a7a15;--good-bg:#e8f6e8;--warn:#b7791f;--warn-bg:#fdf3dd;
+--bad:#b42318;--bad-bg:#fdecec;--page:#f4f4f2;--card:#fff}
 *{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--ink);
 font:14px/1.5 -apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;padding:26px}
-.wrap{max-width:1000px;margin:0 auto}
-h1{font-size:21px;margin:0 0 2px}.sub{color:var(--ink2);margin:0 0 20px;font-size:13px}
-.org{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px;
-box-shadow:0 1px 2px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.04)}
-.oh{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.oname{font-size:16px;font-weight:700}.tag{font-size:11px;color:var(--ink2);background:#eef0f1;border-radius:6px;padding:2px 8px;margin-left:6px}
-.conns{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-.conn{border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-size:12px;min-width:150px}
-.conn b{text-transform:capitalize}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
-.ok{background:var(--good)}.miss{background:#c9c7c1}
-.kpis{display:flex;gap:8px;margin-bottom:12px}
+.wrap{max-width:1040px;margin:0 auto}
+h1{font-size:21px;margin:0 0 2px}.sub{color:var(--ink2);margin:0 0 6px;font-size:13px}
+.lock{font-size:11.5px;color:var(--muted);margin:0 0 20px}
+.lock b{color:var(--good)}.lock.off b{color:var(--bad)}
+.org{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-bottom:18px;
+box-shadow:0 1px 2px rgba(0,0,0,.04),0 6px 22px rgba(0,0,0,.05)}
+.oh{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.oname{font-size:17px;font-weight:700}
+.tag{font-size:11px;color:var(--ink2);background:#eef0f1;border-radius:6px;padding:2px 8px;margin-left:6px}
+.kpis{display:flex;gap:7px}
 .kpi{background:var(--good-bg);color:var(--good);border-radius:8px;padding:5px 11px;font-size:12.5px;font-weight:600}
-.kpi.w{background:var(--warn-bg);color:var(--warn)}
+.kpi.b{background:#eaf1fb;color:#1c5cab}.kpi.w{background:var(--warn-bg);color:var(--warn)}
+h3{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:20px 0 9px;font-weight:700}
+.grid{display:flex;gap:12px;flex-wrap:wrap}
+.conn{flex:1;min-width:240px;border:1px solid var(--line);border-radius:11px;padding:13px 15px}
+.conn .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.conn .nm{font-weight:700;text-transform:capitalize}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.ok{background:var(--good)}.miss{background:#c9c7c1}
+.conn .meta{font-size:12px;color:var(--ink2);margin-bottom:10px}
+.conn .acts{display:flex;gap:8px}
+.btn{display:inline-block;font:inherit;font-size:12.5px;font-weight:600;border-radius:8px;padding:6px 12px;
+border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;text-decoration:none}
+.btn:hover{background:#faf9f7}
+.btn.p{background:var(--brand);border-color:var(--brand);color:#fff}.btn.p:hover{background:#0a2540}
+.btn.danger{color:var(--bad);border-color:#f0cfca}.btn.danger:hover{background:var(--bad-bg)}
+.controls{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end;background:#faf9f7;border:1px solid var(--line);
+border-radius:11px;padding:14px 16px}
+.ctl label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);margin-bottom:5px;font-weight:700}
+.ctl form{display:flex;gap:8px;align-items:center;margin:0}
+input[type=date]{font:inherit;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#fff}
+.mode{font-size:12.5px;color:var(--ink2);margin-right:2px}
+.pending{background:var(--warn-bg);border:1px solid #f0dca8;border-radius:11px;padding:12px 15px;margin-bottom:4px}
+.pending .h{font-weight:700;color:#8a5a0b;margin-bottom:8px;font-size:13px}
+.prow{display:flex;align-items:center;justify-content:space-between;padding:4px 0;font-size:13px}
 table{width:100%;border-collapse:collapse;font-size:13px}
-th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:6px 8px;border-bottom:1px solid var(--line)}
-td{padding:7px 8px;border-bottom:1px solid #f0f0ee}
+th{text-align:left;color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:8px 8px;border-bottom:1px solid #f0f0ee}
 .st{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:6px}
 .st.posted{background:var(--good-bg);color:var(--good)}.st.review{background:var(--warn-bg);color:var(--warn)}
 .st.drafted{background:#eaf1fb;color:#1c5cab}.st.skipped{background:#eef0f1;color:var(--ink2)}
+.st.rejected{background:var(--bad-bg);color:var(--bad)}
 .n{text-align:right;font-variant-numeric:tabular-nums}.mono{font-variant-numeric:tabular-nums;color:var(--ink2)}
-.empty{color:var(--muted);font-size:13px;padding:8px}
+.note{color:var(--muted);font-size:12px}
+.empty{color:var(--muted);font-size:13px;padding:8px 0}
+details{margin-top:14px}summary{cursor:pointer;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700}
+details table{margin-top:9px}
 </style></head><body><div class="wrap">
-<h1>DailyLedger</h1><p class="sub">Square → QuickBooks, reconciled to the penny · multi-tenant</p>
+<h1>DailyLedger</h1>
+<p class="sub">Square &rarr; QuickBooks, reconciled to the penny &middot; multi-tenant control panel</p>
+{% if auth_on %}<p class="lock"><b>&#128274; Secured</b> &middot; password required to view this page</p>
+{% else %}<p class="lock off"><b>&#9888; Not secured</b> &middot; set <code>AUTH_PASS</code> in the host environment to require a password</p>{% endif %}
 
 {% for d in data %}
 <div class="org">
@@ -38,28 +68,84 @@ td{padding:7px 8px;border-bottom:1px solid #f0f0ee}
       <span class="tag">{{ d.org.timezone }}</span></div>
     <div class="kpis">
       <span class="kpi">{{ d.posted }} posted</span>
+      {% if d.drafted %}<span class="kpi b">{{ d.drafted }} drafted</span>{% endif %}
       {% if d.review %}<span class="kpi w">{{ d.review }} review</span>{% endif %}
     </div>
   </div>
-  <div class="conns">
-    {% for c in d.conns %}
-    <div class="conn"><b>{{ c.provider }}</b> · {{ c.environment }}<br>
-      <span class="dot {{ 'ok' if c.has_token or c.provider=='square' else 'miss' }}"></span>
-      {{ 'connected' if c.has_token else ('linked' if c.provider=='square' else 'not connected') }}
-      {% if c.accounts_mapped %} · {{ c.accounts_mapped }} accts{% endif %}</div>
+
+  {% if d.pending %}
+  <div class="pending">
+    <div class="h">&#9203; {{ d.pending|length }} day(s) awaiting your approval</div>
+    {% for p in d.pending %}
+    <div class="prow"><span class="mono">{{ p.date }}</span>
+      <a class="btn p" href="/review/{{ p.token }}">Review &amp; approve &rarr;</a></div>
     {% endfor %}
   </div>
+  {% endif %}
+
+  <h3>Connections</h3>
+  <div class="grid">
+    {% set providers = {'qbo':'QuickBooks','square':'Square'} %}
+    {% for prov, plabel in providers.items() %}
+    {% set c = (d.conns|selectattr('provider','equalto',prov)|list|first) %}
+    <div class="conn">
+      <div class="top"><span class="nm">{{ plabel }}</span>
+        <span>{% if c and c.has_token %}<span class="dot ok"></span>connected{% else %}<span class="dot miss"></span>not connected{% endif %}</span></div>
+      <div class="meta">
+        {% if c %}{{ c.environment }}{% if c.realm %} &middot; {{ c.realm }}{% endif %}{% if c.n_accts %} &middot; {{ c.n_accts }} accounts mapped{% endif %}
+        {% else %}no connection yet{% endif %}
+      </div>
+      <div class="acts">
+        <a class="btn p" href="/connect/{{ prov }}?org_id={{ d.org.id }}">{{ 'Reconnect' if (c and c.has_token) else 'Connect' }}</a>
+        {% if c and c.has_token %}
+        <form action="/disconnect/{{ prov }}?org_id={{ d.org.id }}" method="post" onsubmit="return confirm('Disconnect {{ plabel }}? The stored token is removed; you can reconnect anytime.')">
+          <button class="btn danger" type="submit">Disconnect</button></form>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <h3>Controls</h3>
+  <div class="controls">
+    <div class="ctl">
+      <label>Run / re-run a day</label>
+      <form action="/run" method="get">
+        <input type="hidden" name="org_id" value="{{ d.org.id }}">
+        <input type="date" name="date" required>
+        <button class="btn p" type="submit">Run day</button>
+      </form>
+    </div>
+    <div class="ctl">
+      <label>Posting mode</label>
+      <form action="/settings/rollout?org_id={{ d.org.id }}" method="post">
+        <span class="mode">Currently <b>{{ d.org.rollout_mode.replace('_',' ') }}</b></span>
+        <button class="btn" type="submit">Switch to {{ 'auto-post' if d.org.rollout_mode=='draft_approve' else 'draft &amp; approve' }}</button>
+      </form>
+    </div>
+  </div>
+
+  <h3>Recent runs</h3>
   {% if d.runs %}
-  <table><thead><tr><th>Date</th><th>Batch</th><th>Status</th><th>Doc #</th><th class="n">Deposit</th></tr></thead><tbody>
+  <table><thead><tr><th>Date</th><th>Batch</th><th>Status</th><th>Doc #</th><th class="n">Deposit</th><th>Detail</th></tr></thead><tbody>
     {% for r in d.runs %}<tr>
-      <td class="mono">{{ r.business_date }}</td>
+      <td class="mono">{{ r.date }}</td>
       <td>{{ 'Credit card' if r.batch=='cc' else 'Cash' }}</td>
       <td><span class="st {{ r.status }}">{{ r.status }}</span></td>
-      <td class="mono">{{ r.doc_number or '—' }}</td>
-      <td class="n">${{ r.deposit or '—' }}</td>
+      <td class="mono">{{ r.doc or '&mdash;' }}</td>
+      <td class="n">{% if r.deposit %}${{ r.deposit }}{% else %}&mdash;{% endif %}</td>
+      <td class="note">{{ r.note }}</td>
     </tr>{% endfor %}
   </tbody></table>
-  {% else %}<div class="empty">No sync runs yet.</div>{% endif %}
+  {% else %}<div class="empty">No runs yet &mdash; use <b>Run a day</b> above to draft one.</div>{% endif %}
+
+  {% if d.amap %}
+  <details><summary>Account mapping ({{ d.amap|length }})</summary>
+    <table><thead><tr><th>Ledger line</th><th>QuickBooks account</th><th>Account ID</th></tr></thead><tbody>
+      {% for a in d.amap %}<tr><td>{{ a.key.replace('_',' ') }}</td><td>{{ a.label }}</td><td class="mono">{{ a.id }}</td></tr>{% endfor %}
+    </tbody></table>
+  </details>
+  {% endif %}
 </div>
-{% else %}<div class="empty">No orgs. Run <code>python -m app.demo</code> to seed EverBean.</div>{% endfor %}
+{% else %}<div class="empty">No orgs yet. Visit <code>/setup</code> to create one.</div>{% endfor %}
 </div></body></html>

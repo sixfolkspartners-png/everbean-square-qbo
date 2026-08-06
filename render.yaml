@@ -34,4 +34,4 @@ services:
 
 databases:
   - name: dailyledger-db
-    plan: starter
+    plan: basic-256mb

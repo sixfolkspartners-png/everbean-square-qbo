@@ -4,7 +4,7 @@ services:
   - type: web
     name: dailyledger
     runtime: python
-    plan: starter
+    plan: free
     buildCommand: pip install -r app/requirements.txt
     startCommand: uvicorn app.web:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
@@ -34,4 +34,4 @@ services:
 
 databases:
   - name: dailyledger-db
-    plan: basic-256mb
+    plan: free

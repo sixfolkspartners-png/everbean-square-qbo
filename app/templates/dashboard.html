@@ -141,6 +141,7 @@ details table{margin-top:9px}
 
   {% if d.amap %}
   <details><summary>Account mapping ({{ d.amap|length }})</summary>
+    <p style="margin:10px 0 4px"><a class="btn p" href="/mapping?org_id={{ d.org.id }}">Edit mapping &amp; Square location &rarr;</a></p>
     <table><thead><tr><th>Ledger line</th><th>QuickBooks account</th><th>Account ID</th></tr></thead><tbody>
       {% for a in d.amap %}<tr><td>{{ a.key.replace('_',' ') }}</td><td>{{ a.label }}</td><td class="mono">{{ a.id }}</td></tr>{% endfor %}
     </tbody></table>

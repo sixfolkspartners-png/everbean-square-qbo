@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from .models import make_session, Org, Connection, SyncRun, Approval
-from . import connect, approvals
+from . import connect, approvals, vault
 
 app = FastAPI(title="DailyLedger")
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
@@ -171,6 +171,106 @@ def disconnect(provider: str, org_id: int):
     if c:
         s.delete(c); s.commit()
     return RedirectResponse("/", status_code=303)
+
+
+@app.get("/mapping", response_class=HTMLResponse)
+def mapping_editor(org_id: int):
+    """Editable account mapping: live QuickBooks account dropdowns per ledger line,
+    plus a Square location picker. Options are looked up live from each provider."""
+    import html
+    s = Session()
+    org = s.get(Org, org_id)
+    if not org:
+        return HTMLResponse("<p>Org not found.</p>", status_code=404)
+    qbo = s.query(Connection).filter_by(org_id=org_id, provider="qbo").first()
+    sq = s.query(Connection).filter_by(org_id=org_id, provider="square").first()
+
+    qbo_accounts, qbo_err = [], ""
+    if qbo and qbo.refresh_token_enc:
+        try:
+            from .qbo import QboDestination
+            dest = QboDestination(qbo); nt = dest.refresh()
+            qbo.refresh_token_enc = vault.encrypt(nt); s.commit()
+            rows = dest._query("select Id, Name, AccountType from Account where Active = true order by Name").get("Account", [])
+            qbo_accounts = [(a["Id"], f"{a['Name']} ({a.get('AccountType', '')})") for a in rows]
+        except Exception as e:
+            qbo_err = f"{type(e).__name__}: {e}"
+    amap = qbo.account_map if qbo else {}
+
+    sq_locations, sq_err = [], ""
+    sq_current = sq.realm_or_location if sq else ""
+    if sq and sq.refresh_token_enc:
+        try:
+            import requests
+            tok = vault.decrypt(sq.refresh_token_enc)
+            base = connect.SQUARE_API.get(sq.environment, connect.SQUARE_API["production"])
+            r = requests.get(f"{base}/v2/locations", timeout=60,
+                             headers={"Authorization": f"Bearer {tok}", "Square-Version": connect.SQUARE_VERSION})
+            r.raise_for_status()
+            sq_locations = [(l["id"], l.get("name", l["id"])) for l in r.json().get("locations", [])]
+        except Exception as e:
+            sq_err = f"{type(e).__name__}: {e}"
+
+    def opts(pairs, current):
+        out = ["<option value=''>&mdash; not mapped &mdash;</option>"]
+        for val, label in pairs:
+            sel = " selected" if val == current else ""
+            out.append(f"<option value='{html.escape(str(val))}'{sel}>{html.escape(str(label))}</option>")
+        return "".join(out)
+
+    sel_css = "width:100%;padding:8px;border:1px solid #ddd;border-radius:8px;font:inherit;background:#fff"
+    h = [f"<div style='font-family:system-ui,Arial,sans-serif;max-width:760px;margin:36px auto;color:#0b0b0b'>"]
+    h.append("<p><a href='/'>&larr; Dashboard</a></p>")
+    h.append(f"<h2 style='margin:0 0 2px'>Account mapping &middot; {html.escape(org.name)}</h2>")
+    h.append("<p style='color:#666;margin:0 0 20px'>Choose which QuickBooks account each ledger line posts to. Options are pulled live from your chart of accounts.</p>")
+    if not (qbo and qbo.refresh_token_enc):
+        h.append("<p style='background:#fdf3dd;padding:10px;border-radius:8px'>Connect QuickBooks first to load accounts.</p>")
+    if qbo_err:
+        h.append(f"<p style='background:#fdecec;padding:10px;border-radius:8px'>Couldn't load QuickBooks accounts: {html.escape(qbo_err)}</p>")
+    h.append(f"<form method='post' action='/mapping?org_id={org_id}'>")
+    h.append("<table style='width:100%;border-collapse:collapse'>")
+    for key, label in FRIENDLY.items():
+        h.append("<tr>"
+                 f"<td style='padding:9px 12px 9px 0;border-bottom:1px solid #eee;vertical-align:top'>"
+                 f"<div style='font-weight:600'>{label}</div><div style='color:#999;font-size:11px'>{key}</div></td>"
+                 f"<td style='padding:9px 0;border-bottom:1px solid #eee'>"
+                 f"<select name='acct_{key}' style='{sel_css}'>{opts(qbo_accounts, amap.get(key, ''))}</select></td>"
+                 "</tr>")
+    h.append("</table>")
+    h.append("<h3 style='margin:26px 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#888'>Square location</h3>")
+    if not sq:
+        h.append("<p style='color:#888'>No Square connection yet.</p>")
+    else:
+        if sq_err:
+            h.append(f"<p style='background:#fdecec;padding:10px;border-radius:8px'>Couldn't load Square locations: {html.escape(sq_err)}</p>")
+        h.append(f"<select name='location' style='{sel_css}'>{opts(sq_locations, sq_current)}</select>")
+    h.append("<div style='margin-top:24px'><button type='submit' style='background:#12314f;color:#fff;border:0;border-radius:8px;padding:11px 20px;font:inherit;font-weight:600;cursor:pointer'>Save mapping</button></div>")
+    h.append("</form></div>")
+    return HTMLResponse("".join(h))
+
+
+@app.post("/mapping")
+async def mapping_save(request: Request, org_id: int):
+    import urllib.parse
+    raw = (await request.body()).decode()
+    form = {k: v[0] for k, v in urllib.parse.parse_qs(raw).items()}
+    s = Session()
+    qbo = s.query(Connection).filter_by(org_id=org_id, provider="qbo").first()
+    if qbo:
+        m = dict(qbo.account_map)
+        for key in FRIENDLY:
+            v = form.get(f"acct_{key}", "")
+            if v:
+                m[key] = v
+            elif key in m:
+                del m[key]
+        qbo.account_map = m
+    sq = s.query(Connection).filter_by(org_id=org_id, provider="square").first()
+    loc = form.get("location")
+    if sq and loc:
+        sq.realm_or_location = loc
+    s.commit()
+    return RedirectResponse(f"/mapping?org_id={org_id}", status_code=303)
 
 
 @app.get("/review/{token}", response_class=HTMLResponse)

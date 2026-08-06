@@ -155,6 +155,12 @@ class SampleSource:
                      "over_short": "0", "deposit": "2076.45"},
             "cash": {"gross": "212.39", "tax": "9.56", "deposit": "221.95"},
         },
+        "2026-08-05": {
+            "cc":   {"gross": "1800.23", "discounts": "-10.05", "tax": "80.39", "tips": "260.48",
+                     "gift_cards_sold": "100.00", "gift_card_redemptions": "85.92", "fees": "68.68",
+                     "over_short": "0", "deposit": "2076.45"},
+            "cash": {"gross": "212.39", "tax": "9.56", "deposit": "221.95"},
+        },
     }
 
     def __init__(self, conn=None):

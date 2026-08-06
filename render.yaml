@@ -1,0 +1,37 @@
+# Render Blueprint — one file that provisions the web service + Postgres.
+# New → Blueprint in Render, point at this repo, and it builds everything below.
+services:
+  - type: web
+    name: dailyledger
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r app/requirements.txt
+    startCommand: uvicorn app.web:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: DAILYLEDGER_FERNET_KEY      # token-vault key — Render generates a good one
+        generateValue: true
+      - key: DATABASE_URL                # wired to the Postgres below automatically
+        fromDatabase:
+          name: dailyledger-db
+          property: connectionString
+      - key: QBO_APP_ENV
+        value: production
+      - key: QBO_APP_REDIRECT_URI
+        value: https://dailyledger.onrender.com/callback/qbo
+      - key: SQUARE_APP_ENV
+        value: production
+      - key: SQUARE_APP_REDIRECT_URI
+        value: https://dailyledger.onrender.com/callback/square
+      - key: QBO_APP_CLIENT_ID           # you paste these in the Render dashboard (secret)
+        sync: false
+      - key: QBO_APP_CLIENT_SECRET
+        sync: false
+      - key: SQUARE_APP_CLIENT_ID
+        sync: false
+      - key: SQUARE_APP_CLIENT_SECRET
+        sync: false
+
+databases:
+  - name: dailyledger-db
+    plan: starter

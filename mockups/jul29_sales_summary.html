@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EverBean · July 29 sales summary</title>
+<style>
+:root{--page:#f4f4f2;--surface:#fff;--surface-2:#fcfcfb;--ink:#0b0b0b;--ink-2:#52514e;--muted:#898781;
+--line:rgba(11,11,11,.09);--line-2:rgba(11,11,11,.06);--brand:#12314f;--accent:#2a78d6;--accent-wash:#eaf1fb;
+--good:#0ca30c;--good-wash:#e8f6e8;--good-ink:#0a7a15;--crit:#d03b3b;
+--shadow:0 1px 2px rgba(11,11,11,.04),0 4px 16px rgba(11,11,11,.05)}
+*{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--ink);
+font:14px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;padding:26px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:940px;margin:0 auto}
+.head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+h1{font-size:20px;margin:0 0 2px;letter-spacing:-.01em}.sub{color:var(--ink-2);margin:0;font-size:13.5px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:20px;font-size:12.5px;font-weight:600;
+background:var(--good-wash);color:var(--good-ink)}.pill .d{width:6px;height:6px;border-radius:50%;background:var(--good)}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:18px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:14px 15px}
+.kpi .lab{color:var(--muted);font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+.kpi .val{font-size:23px;font-weight:700;letter-spacing:-.02em;margin-top:6px}
+.kpi .meta{font-size:12px;color:var(--ink-2);margin-top:3px}
+.cols{display:grid;grid-template-columns:1.15fr 1fr;gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:18px 20px}
+.h{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700;margin:0 0 14px}
+table{width:100%;border-collapse:collapse}
+.rec td{padding:10px 2px;border-bottom:1px solid var(--line-2)}
+.rec .lbl{font-weight:600}.rec .acct{color:var(--muted);font-size:12px;font-weight:400;margin-top:1px}
+.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.neg{color:var(--crit)}
+.rec .sub2 td{border-top:1px solid var(--ink);border-bottom:none;font-weight:700;padding-top:11px}
+.rec .grand td{border-top:2px solid var(--ink);border-bottom:none;font-weight:700;font-size:16px;padding-top:11px}
+.rec .muted td{color:var(--muted)}
+.recon{display:flex;align-items:center;gap:9px;background:var(--good-wash);color:var(--good-ink);
+padding:11px 14px;border-radius:9px;font-weight:600;margin-top:14px;font-size:13px}
+.cat{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.cat .cname{width:120px;font-size:12.5px;color:var(--ink-2);flex:none}
+.cat .track{flex:1;background:#eef0f1;border-radius:4px;height:14px;overflow:hidden}
+.cat .bar{height:100%;background:var(--accent);border-radius:4px}
+.cat .cval{width:70px;text-align:right;font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:600;flex:none}
+.foot{color:var(--muted);font-size:12px;margin-top:12px}
+</style></head><body><div class="wrap">
+<div class="head">
+  <div><h1>Daily sales summary — Wednesday, July 29, 2026</h1>
+  <p class="sub">EverBean Coffee Co · 139 orders · pulled live from Square</p></div>
+  <span class="pill"><span class="d"></span>Reconciles · +$0.05 over/short</span>
+</div>
+
+<div class="grid4">
+  <div class="kpi"><div class="lab">Total collected</div><div class="val">$2,667.69</div><div class="meta">incl. tax &amp; tips</div></div>
+  <div class="kpi"><div class="lab">Net product sales</div><div class="val">$2,047.42</div><div class="meta">gross − discounts</div></div>
+  <div class="kpi"><div class="lab">Orders</div><div class="val">139</div><div class="meta">$19.19 avg ticket</div></div>
+  <div class="kpi"><div class="lab">To deposit</div><div class="val">$2,563.46</div><div class="meta">after gift-card redemptions</div></div>
+</div>
+
+<div class="cols">
+  <!-- receipt -->
+  <div class="card">
+    <div class="h">As it posts to QuickBooks</div>
+    <table class="rec">
+      <tr><td class="lbl">Gross product sales<div class="acct">→ Sales of Product Income</div></td><td class="n">$2,070.62</td></tr>
+      <tr><td class="lbl">Discounts<div class="acct">→ Discount Income</div></td><td class="n neg">−$23.20</td></tr>
+      <tr><td class="lbl">Tips collected<div class="acct">→ Tips Payable · liability</div></td><td class="n">$279.44</td></tr>
+      <tr><td class="lbl">Gift cards sold<div class="acct">→ Gift Card Outstanding · liability</div></td><td class="n">$250.00</td></tr>
+      <tr><td class="lbl">Sales tax collected<div class="acct">→ Square Sales Tax Payable · exact</div></td><td class="n">$90.78</td></tr>
+      <tr><td class="lbl">Over &amp; short<div class="acct">→ Over &amp; Short</div></td><td class="n">$0.05</td></tr>
+      <tr class="sub2"><td>Total collected</td><td class="n">$2,667.69</td></tr>
+      <tr class="muted"><td>Gift cards redeemed<div class="acct">→ Gift Card Outstanding · liability</div></td><td class="n neg">−$104.23</td></tr>
+      <tr class="grand"><td>Deposit → Checking ••0017</td><td class="n">$2,563.46</td></tr>
+    </table>
+    <div class="recon">
+      <svg viewBox="0 0 20 20" width="17" height="17" fill="none"><path d="M4 10l4 4 8-9" stroke="#0a7a15" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Tax booked to the penny · tips &amp; gift cards held as liabilities
+    </div>
+  </div>
+
+  <!-- category breakdown -->
+  <div class="card">
+    <div class="h">Where the sales came from</div>
+    <div class="cat"><div class="cname">Coffee Products</div><div class="track"><div class="bar" style="width:100%"></div></div><div class="cval">$537.85</div></div>
+    <div class="cat"><div class="cname">Breakfast</div><div class="track"><div class="bar" style="width:72%"></div></div><div class="cval">$389.35</div></div>
+    <div class="cat"><div class="cname">Lunch</div><div class="track"><div class="bar" style="width:70%"></div></div><div class="cval">$378.53</div></div>
+    <div class="cat"><div class="cname">Pastry</div><div class="track"><div class="bar" style="width:53%"></div></div><div class="cval">$284.39</div></div>
+    <div class="cat"><div class="cname">Tea Products</div><div class="track"><div class="bar" style="width:27%"></div></div><div class="cval">$142.62</div></div>
+    <div class="cat"><div class="cname">Signature Drinks</div><div class="track"><div class="bar" style="width:19%"></div></div><div class="cval">$100.90</div></div>
+    <div class="cat"><div class="cname">Merchandise</div><div class="track"><div class="bar" style="width:18%"></div></div><div class="cval">$96.00</div></div>
+    <div class="cat"><div class="cname">Ice Cream</div><div class="track"><div class="bar" style="width:10%"></div></div><div class="cval">$51.40</div></div>
+    <div class="cat"><div class="cname">Coffee Beans</div><div class="track"><div class="bar" style="width:7%"></div></div><div class="cval">$36.00</div></div>
+    <div class="cat"><div class="cname">Bottle Beverage</div><div class="track"><div class="bar" style="width:6%"></div></div><div class="cval">$30.38</div></div>
+    <div class="cat"><div class="cname">Cold Drinks</div><div class="track"><div class="bar" style="width:3%"></div></div><div class="cval">$14.00</div></div>
+    <div class="cat"><div class="cname">Other Beverages</div><div class="track"><div class="bar" style="width:2%"></div></div><div class="cval">$7.95</div></div>
+    <div class="foot">Coffee + breakfast + lunch drove 63% of the day. Gift-card sales ($250) are booked as a liability, not revenue.</div>
+  </div>
+</div>
+</div></body></html>

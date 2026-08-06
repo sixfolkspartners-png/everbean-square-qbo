@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DailyLedger — connection flow</title>
+<style>
+:root{
+  --page:#f4f4f2;--surface:#fff;--surface-2:#fcfcfb;--ink:#0b0b0b;--ink-2:#52514e;--muted:#898781;
+  --line:rgba(11,11,11,.10);--brand:#12314f;--accent:#2a78d6;--accent-wash:#eaf1fb;
+  --good:#0ca30c;--good-wash:#e8f6e8;--good-ink:#0a7a15;--sq:#0b0b0b;
+  --shadow:0 1px 2px rgba(11,11,11,.05),0 6px 20px rgba(11,11,11,.06);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);
+  font:14px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;padding:28px}
+.wrap{max-width:1120px;margin:0 auto}
+h1{font-size:21px;margin:0 0 4px;letter-spacing:-.01em}
+.lead{color:var(--ink-2);margin:0 0 22px;max-width:760px}
+.board{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
+.frame{display:flex;flex-direction:column;gap:9px}
+.cap{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px}
+.cap .num{width:22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center;font-size:12px;flex:none}
+.who{font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;padding:2px 7px;border-radius:5px;width:fit-content}
+.who.us{background:var(--accent-wash);color:#1c5cab}
+.who.sq{background:#eeecea;color:#333}
+.screen{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);
+  height:250px;padding:14px;display:flex;flex-direction:column;gap:10px;overflow:hidden;position:relative}
+.bar{height:26px;border-radius:6px 6px 0 0;margin:-14px -14px 2px;display:flex;align-items:center;padding:0 10px;gap:6px;font-size:11px;font-weight:600}
+.bar.us{background:var(--brand);color:#dfe7f0}
+.bar.sq{background:#000;color:#fff}
+.dot3{display:flex;gap:4px}.dot3 i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.35)}
+.logo{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:15px}
+.logo.sq{background:var(--sq)}.logo.qb{background:#2ca01c}.logo.dl{background:linear-gradient(135deg,#3d8bfd,#2a78d6)}
+.row{display:flex;align-items:center;gap:10px}
+.name{font-weight:700;font-size:13.5px}.desc{color:var(--muted);font-size:11.5px}
+.btn{border:none;border-radius:8px;padding:9px 12px;font-weight:600;font-size:12.5px;cursor:default;text-align:center}
+.btn.pri{background:var(--accent);color:#fff}.btn.dark{background:#000;color:#fff}.btn.ghost{background:var(--surface-2);border:1px solid var(--line)}
+.mut{color:var(--ink-2);font-size:12px}
+.center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center}
+.spinner{width:30px;height:30px;border-radius:50%;border:3px solid var(--accent-wash);border-top-color:var(--accent)}
+.check{width:40px;height:40px;border-radius:50%;background:var(--good-wash);display:grid;place-items:center}
+.field{border:1px solid var(--line);border-radius:7px;padding:8px 10px;font-size:12px;color:var(--muted);background:var(--surface-2)}
+.scope{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--ink-2)}
+.scope .c{color:var(--good-ink);font-weight:700}
+.connected{display:flex;align-items:center;gap:7px;color:var(--good-ink);font-weight:600;font-size:12px;background:var(--good-wash);padding:7px 10px;border-radius:7px}
+.callout{margin-top:22px;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:10px;padding:14px 18px;box-shadow:var(--shadow)}
+.callout b{color:var(--ink)}
+small.note{display:block;color:var(--muted);margin-top:7px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>How connecting an account works — the standard OAuth flow</h1>
+  <p class="lead">Click once, log in on the provider's own site, come back connected. The user never types their Square or QuickBooks password into DailyLedger — that's the whole point, and it's what makes it feel (and be) secure and professional.</p>
+
+  <div class="board">
+    <!-- 1 -->
+    <div class="frame">
+      <div class="cap"><span class="num">1</span>Start the connection</div>
+      <span class="who us">In DailyLedger</span>
+      <div class="screen">
+        <div class="bar us"><span class="dot3"><i></i><i></i><i></i></span>DailyLedger</div>
+        <div class="row"><div class="logo sq">□</div><div><div class="name">Square</div><div class="desc">Point of sale</div></div></div>
+        <div class="mut">We'll pull your daily sales, payments &amp; payouts — read-only.</div>
+        <div style="flex:1"></div>
+        <div class="btn pri">Connect Square</div>
+      </div>
+    </div>
+
+    <!-- 2 -->
+    <div class="frame">
+      <div class="cap"><span class="num">2</span>Redirect to Square</div>
+      <span class="who us">DailyLedger → Square</span>
+      <div class="screen">
+        <div class="bar us"><span class="dot3"><i></i><i></i><i></i></span>DailyLedger</div>
+        <div class="center">
+          <div class="spinner"></div>
+          <div class="mut">Taking you to Square to<br>sign in securely…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3 -->
+    <div class="frame">
+      <div class="cap"><span class="num">3</span>Sign in &amp; approve</div>
+      <span class="who sq">On Square's own site</span>
+      <div class="screen">
+        <div class="bar sq"><span class="dot3"><i></i><i></i><i></i></span>squareup.com 🔒</div>
+        <div class="row"><div class="logo sq">□</div><div class="name" style="font-size:13px">Sign in to Square</div></div>
+        <div class="field">you@everbean.coffee</div>
+        <div class="field">••••••••••</div>
+        <div class="mut" style="margin-top:2px"><b style="color:var(--ink)">DailyLedger</b> wants access to:</div>
+        <div class="scope"><span class="c">✓</span> Sales &amp; payments (read-only)</div>
+        <div class="scope"><span class="c">✓</span> Payouts (read-only)</div>
+        <div style="flex:1"></div>
+        <div class="btn dark">Allow</div>
+      </div>
+    </div>
+
+    <!-- 4 -->
+    <div class="frame">
+      <div class="cap"><span class="num">4</span>Back to DailyLedger</div>
+      <span class="who us">Square → DailyLedger</span>
+      <div class="screen">
+        <div class="bar us"><span class="dot3"><i></i><i></i><i></i></span>DailyLedger</div>
+        <div class="center">
+          <div class="check"><svg viewBox="0 0 20 20" width="22" height="22" fill="none"><path d="M4 10l4 4 8-9" stroke="#0a7a15" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div><div style="font-weight:700">Square connected</div><div class="mut">Matching your accounts…</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5 -->
+    <div class="frame">
+      <div class="cap"><span class="num">5</span>Done</div>
+      <span class="who us">In DailyLedger</span>
+      <div class="screen">
+        <div class="bar us"><span class="dot3"><i></i><i></i><i></i></span>DailyLedger</div>
+        <div class="connected"><svg viewBox="0 0 20 20" width="14" height="14" fill="none"><path d="M4 10l4 4 8-9" stroke="#0a7a15" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Square · 2 locations</div>
+        <div class="connected"><svg viewBox="0 0 20 20" width="14" height="14" fill="none"><path d="M4 10l4 4 8-9" stroke="#0a7a15" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>QuickBooks · SixFolks LLC</div>
+        <div class="mut" style="margin-top:2px">9 accounts auto-matched.</div>
+        <div style="flex:1"></div>
+        <div class="btn pri">Go to dashboard</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <b>Why yours feels disjointed right now:</b> steps 2–4 only work once a <b>Square OAuth app</b> and an <b>Intuit OAuth app</b> are registered, each with DailyLedger's callback URL whitelisted. Until then the “Connect” button has no real place to send you, so it falls back to a stub — which is exactly the disjointed feeling. Register the two apps (15 min each) and this exact flow lights up.
+    <small class="note">Same journey for QuickBooks — the redirect just goes to intuit.com instead of squareup.com. QuickBooks additionally asks which company file to connect.</small>
+  </div>
+</div>
+</body>
+</html>

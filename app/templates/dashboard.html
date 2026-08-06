@@ -1,0 +1,65 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>DailyLedger</title>
+<style>
+:root{--ink:#0b0b0b;--ink2:#52514e;--muted:#8a8a84;--line:#e6e6e4;--brand:#12314f;
+--accent:#2a78d6;--good:#0a7a15;--good-bg:#e8f6e8;--warn:#b7791f;--warn-bg:#fdf3dd;--page:#f4f4f2;--card:#fff}
+*{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--ink);
+font:14px/1.5 -apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;padding:26px}
+.wrap{max-width:1000px;margin:0 auto}
+h1{font-size:21px;margin:0 0 2px}.sub{color:var(--ink2);margin:0 0 20px;font-size:13px}
+.org{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px;
+box-shadow:0 1px 2px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.04)}
+.oh{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.oname{font-size:16px;font-weight:700}.tag{font-size:11px;color:var(--ink2);background:#eef0f1;border-radius:6px;padding:2px 8px;margin-left:6px}
+.conns{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.conn{border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-size:12px;min-width:150px}
+.conn b{text-transform:capitalize}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
+.ok{background:var(--good)}.miss{background:#c9c7c1}
+.kpis{display:flex;gap:8px;margin-bottom:12px}
+.kpi{background:var(--good-bg);color:var(--good);border-radius:8px;padding:5px 11px;font-size:12.5px;font-weight:600}
+.kpi.w{background:var(--warn-bg);color:var(--warn)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:7px 8px;border-bottom:1px solid #f0f0ee}
+.st{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:6px}
+.st.posted{background:var(--good-bg);color:var(--good)}.st.review{background:var(--warn-bg);color:var(--warn)}
+.st.drafted{background:#eaf1fb;color:#1c5cab}.st.skipped{background:#eef0f1;color:var(--ink2)}
+.n{text-align:right;font-variant-numeric:tabular-nums}.mono{font-variant-numeric:tabular-nums;color:var(--ink2)}
+.empty{color:var(--muted);font-size:13px;padding:8px}
+</style></head><body><div class="wrap">
+<h1>DailyLedger</h1><p class="sub">Square → QuickBooks, reconciled to the penny · multi-tenant</p>
+
+{% for d in data %}
+<div class="org">
+  <div class="oh">
+    <div><span class="oname">{{ d.org.name }}</span>
+      <span class="tag">{{ d.org.posting_format.replace('_',' ') }}</span>
+      <span class="tag">{{ d.org.rollout_mode.replace('_',' ') }}</span>
+      <span class="tag">{{ d.org.timezone }}</span></div>
+    <div class="kpis">
+      <span class="kpi">{{ d.posted }} posted</span>
+      {% if d.review %}<span class="kpi w">{{ d.review }} review</span>{% endif %}
+    </div>
+  </div>
+  <div class="conns">
+    {% for c in d.conns %}
+    <div class="conn"><b>{{ c.provider }}</b> · {{ c.environment }}<br>
+      <span class="dot {{ 'ok' if c.has_token or c.provider=='square' else 'miss' }}"></span>
+      {{ 'connected' if c.has_token else ('linked' if c.provider=='square' else 'not connected') }}
+      {% if c.accounts_mapped %} · {{ c.accounts_mapped }} accts{% endif %}</div>
+    {% endfor %}
+  </div>
+  {% if d.runs %}
+  <table><thead><tr><th>Date</th><th>Batch</th><th>Status</th><th>Doc #</th><th class="n">Deposit</th></tr></thead><tbody>
+    {% for r in d.runs %}<tr>
+      <td class="mono">{{ r.business_date }}</td>
+      <td>{{ 'Credit card' if r.batch=='cc' else 'Cash' }}</td>
+      <td><span class="st {{ r.status }}">{{ r.status }}</span></td>
+      <td class="mono">{{ r.doc_number or '—' }}</td>
+      <td class="n">${{ r.deposit or '—' }}</td>
+    </tr>{% endfor %}
+  </tbody></table>
+  {% else %}<div class="empty">No sync runs yet.</div>{% endif %}
+</div>
+{% else %}<div class="empty">No orgs. Run <code>python -m app.demo</code> to seed EverBean.</div>{% endfor %}
+</div></body></html>

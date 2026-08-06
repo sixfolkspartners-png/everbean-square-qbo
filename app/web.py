@@ -48,6 +48,23 @@ def setup():
         f"<p style='margin-top:24px'><a href='/'>Dashboard</a></p></div>")
 
 
+@app.get("/run", response_class=HTMLResponse)
+def run_route(org_id: int, date: str):
+    """Run one business day through the pipeline (draft-and-approve builds the JEs
+    and returns a review link; nothing posts until approved)."""
+    from .pipeline import run_day
+    result = run_day(Session(), org_id, date)
+    link = result.get("review") or {}
+    rp = link.get("review_path", "")
+    body = f"<div style='font-family:system-ui,Arial,sans-serif;max-width:680px;margin:40px auto'>"
+    body += f"<h2>Ran {result['org']} &middot; {result['date']} &middot; {result['rollout']}</h2>"
+    body += f"<pre style='background:#f5f5f5;padding:12px;overflow:auto'>{json.dumps(result['batches'], indent=2)}</pre>"
+    if rp:
+        body += f"<p><a href='{rp}'>Review &amp; approve &rarr;</a></p>"
+    body += f"<p><a href='/'>Dashboard</a></p></div>"
+    return HTMLResponse(body)
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
     s = Session()

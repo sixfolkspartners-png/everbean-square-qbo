@@ -91,7 +91,8 @@ def dashboard(request: Request):
                 detail = {}
             note = ""
             if r.status == "review":
-                note = f"implied ${detail.get('implied', '?')} vs deposit ${detail.get('deposit', '?')}"
+                v = detail.get("variance") or {}
+                note = f"over/short ${v.get('over_short', '?')} · deposit ${v.get('deposit', detail.get('deposit', '?'))}"
             elif detail.get("lines"):
                 note = f"{detail['lines']} lines"
             run_rows.append({"date": r.business_date, "batch": r.batch, "status": r.status,
@@ -279,8 +280,25 @@ def review(request: Request, token: str):
     appr, org, drafts = approvals.load(s, token)
     if not appr:
         return HTMLResponse("<p>Approval not found.</p>", status_code=404)
+    # accounts the user can book a reviewed residual to (mapped QBO accounts)
+    qbo = s.query(Connection).filter_by(org_id=appr.org_id, provider="qbo").first()
+    amap = qbo.account_map if qbo else {}
+    accounts = [{"key": k, "label": FRIENDLY.get(k, k)} for k in FRIENDLY if k in amap]
     return templates.TemplateResponse(request, "review.html",
-                                      {"appr": appr, "org": org, "drafts": drafts})
+                                      {"appr": appr, "org": org, "drafts": drafts,
+                                       "accounts": accounts})
+
+
+@app.post("/adjust/{token}")
+async def adjust_route(request: Request, token: str):
+    """Resolve a flagged batch from the portal review window: book the residual to
+    the chosen account with an optional memo, staging it for approval."""
+    import urllib.parse
+    raw = (await request.body()).decode()
+    form = {k: v[0] for k, v in urllib.parse.parse_qs(raw).items()}
+    approvals.adjust(Session(), token, form.get("batch", ""),
+                     form.get("account_key", "over_short"), form.get("memo", ""))
+    return RedirectResponse(f"/review/{token}", status_code=303)
 
 
 @app.post("/approve/{token}")

@@ -2,7 +2,9 @@
 respecting the org's rollout mode, and recording a SyncRun per batch.
 
 The reconcile gate enforces the hard rule: each batch must tie to its deposit to
-the penny, else it is flagged 'review' and NOT posted.
+the penny (and its Over/Short plug must be small), else it is flagged 'review' and
+NOT posted — but its proposed journal entry is still built and stored so the
+portal's review window can show the numbers and let the user adjust before posting.
 """
 from __future__ import annotations
 import os, json, secrets
@@ -13,10 +15,10 @@ from .square_source import SquareSource, SampleSource
 from .qbo import QboDestination
 
 TOL = Decimal("0.005")
-# The over/short plug absorbs the residual between the order-derived collection and
-# the authoritative payout. Tiny = rounding (fine). A large plug means real events
-# (refunds, uncaptured fees, unsettled auths) aren't modeled yet, so the day is
-# flagged for human review instead of auto-drafting. Tune via env.
+# The over/short plug absorbs the residual between the payout-anchored settlement
+# and the modeled sales. Tiny = rounding (fine). A large plug means a real event
+# (an unmodeled fee/dispute/adjustment, a missing order) isn't accounted for, so
+# the day is flagged for human review instead of auto-drafting. Tune via env.
 OVER_SHORT_LIMIT = Decimal(os.environ.get("OVER_SHORT_LIMIT", "5"))
 
 
@@ -35,6 +37,7 @@ def run_day(session, org_id: int, business_date: str) -> dict:
     sq_token = vault.decrypt(src_conn.refresh_token_enc) if (src_conn and src_conn.refresh_token_enc) else None
     src = SquareSource(src_conn, sq_token) if sq_token else SampleSource(src_conn)
     db = src.pull_day(business_date)
+    meta = getattr(src, "last_meta", {}) or {}
 
     dest = QboDestination(dest_conn)
     new_refresh = dest.refresh()
@@ -45,10 +48,12 @@ def run_day(session, org_id: int, business_date: str) -> dict:
     dry = org.rollout_mode == "draft_approve"   # draft-approve => build but don't post
     results = {}
     for batch_name, batch in (("cc", db.cc), ("cash", db.cash)):
-        # reconcile gate: computed deposit must tie to the source deposit
+        # reconcile gate: the payout-anchored deposit must tie, and the plug be small
         implied = batch.implied_deposit()
         tie_ok = abs(implied - batch.deposit) <= TOL          # plug makes this hold; sanity check
         plug_ok = abs(batch.over_short) <= OVER_SHORT_LIMIT   # the plug itself must be small
+        reconciled = tie_ok and plug_ok
+
         run = (session.query(SyncRun)
                .filter_by(org_id=org_id, business_date=business_date, batch=batch_name).first())
         if not run:
@@ -56,29 +61,40 @@ def run_day(session, org_id: int, business_date: str) -> dict:
             session.add(run)
         run.deposit = str(batch.deposit)
 
-        if not (tie_ok and plug_ok):
+        # Always build the proposed JE (it balances — the Over/Short line, if any,
+        # is the visible variance) so the review window can render it either way.
+        body = dest.build_cc_je(business_date, batch) if batch_name == "cc" else dest.build_cash_je(business_date, batch)
+
+        variance = {"over_short": str(batch.over_short), "deposit": str(batch.deposit),
+                    "implied": str(implied), "fees": str(batch.fees), "refunds": str(batch.refunds),
+                    "redemptions": str(batch.gift_card_redemptions)}
+
+        if not reconciled:
             reason = "did_not_reconcile" if not tie_ok else "over_short_exceeds_limit"
             run.status = "review"
-            run.detail_json = json.dumps({"reason": reason, "implied": str(implied),
-                                          "deposit": str(batch.deposit), "over_short": str(batch.over_short)})
+            run.doc_number = body["DocNumber"]
+            detail = {"lines": len(body["Line"]), "body": body, "reason": reason,
+                      "variance": variance, "meta": meta}
+            run.detail_json = json.dumps(detail)
             results[batch_name] = {"status": "review", "reason": reason,
                                    "over_short": str(batch.over_short), "deposit": str(batch.deposit)}
             continue
 
-        body = dest.build_cc_je(business_date, batch) if batch_name == "cc" else dest.build_cash_je(business_date, batch)
         res = dest.post_batch(body, dry_run=dry)
         run.status = res["status"]           # drafted | posted | skipped
         run.doc_number = res.get("doc_number", "")
         run.qbo_id = res.get("qbo_id", "")
-        detail = {"lines": len(body["Line"])}
+        detail = {"lines": len(body["Line"]), "variance": variance, "meta": meta}
         if res["status"] == "drafted":
             detail["body"] = body            # keep the draft to post on approval
         run.detail_json = json.dumps(detail)
         results[batch_name] = {k: v for k, v in res.items() if k != "body"}
 
-    # draft-and-approve: if anything was drafted, ensure a one-click approval token
+    # draft-and-approve / review: whenever a day has a drafted OR a review batch,
+    # ensure a one-click approval token so the user gets a review-window link.
     review = None
-    if any(b.get("status") == "drafted" for b in results.values()):
+    needs_review = any(b.get("status") in ("drafted", "review") for b in results.values())
+    if needs_review:
         appr = session.query(Approval).filter_by(org_id=org_id, business_date=business_date).first()
         if not appr:
             appr = Approval(org_id=org_id, business_date=business_date, token=secrets.token_urlsafe(24))

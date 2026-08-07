@@ -87,6 +87,9 @@ class QboDestination:
             lines.append(self._cr("gift_card_liability", b.gift_cards_sold, "Gift cards sold"))
         if b.gift_card_redemptions:
             lines.append(self._dr("gift_card_liability", b.gift_card_redemptions, "Gift card redemptions"))
+        if b.refunds:
+            # refund paid back out; contra-revenue (deposit is already net of it)
+            lines.append(self._dr("sales_income", b.refunds, "Refunds & returns"))
         if b.over_short:
             lines.append((self._cr if b.over_short > 0 else self._dr)("over_short", abs(b.over_short), "Over and short"))
         return {"DocNumber": f"SQ-{day.replace('-','')}-CC", "TxnDate": day,
@@ -99,6 +102,8 @@ class QboDestination:
             lines.append(self._cr("sales_tax_payable", b.tax, "Sales tax collected (Square exact)"))
         if b.discounts:
             lines.append(self._dr("discounts", -b.discounts, "Discounts"))
+        if b.refunds:
+            lines.append(self._dr("sales_income", b.refunds, "Refunds & returns"))
         if b.over_short:
             lines.append((self._cr if b.over_short > 0 else self._dr)("over_short", abs(b.over_short), "Over and short"))
         return {"DocNumber": f"SQ-{day.replace('-','')}-CASH", "TxnDate": day,

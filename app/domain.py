@@ -20,6 +20,7 @@ class Batch:
     gift_cards_sold: Decimal = Decimal("0")        # liability +
     gift_card_redemptions: Decimal = Decimal("0")  # liability - (positive number)
     fees: Decimal = Decimal("0")           # Square fees (expense), positive number
+    refunds: Decimal = Decimal("0")        # refunds paid back out (positive number); contra-revenue
     over_short: Decimal = Decimal("0")     # plug
     deposit: Decimal = Decimal("0")        # what hits the bank (payout / cash deposit)
 
@@ -31,7 +32,8 @@ class Batch:
         return self.collected() - self.gift_card_redemptions
 
     def implied_deposit(self) -> Decimal:
-        return self.net_after_redemptions() - self.fees + self.over_short
+        # a refund reduces the bank deposit (the payout is already net of it)
+        return self.net_after_redemptions() - self.fees - self.refunds + self.over_short
 
 
 @dataclass

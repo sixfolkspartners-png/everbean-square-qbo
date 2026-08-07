@@ -1,21 +1,32 @@
 """Square source adapter — pulls a day's two-batch DailyBatches for a tenant.
 
-Implements the locked rules (everbean-two-batch-tender-split-spec.md):
-- Tender split from Orders: each order's money split by its ACTUAL tenders;
-  tender.amount_money INCLUDES the tip (stripped before net product sales).
-  CARD + SQUARE_GIFT_CARD -> card batch; CASH -> cash batch; cash tips excluded.
-- Gift-card redemptions = SQUARE_GIFT_CARD tender collected (cross-checked to
-  GiftCardActivities REDEEM/COMPLETED); a reduction inside the card batch.
-- Fees + the card deposit are AUTHORITATIVE from the payout, fully paginated via
-  Payouts.listEntries (never estimated). CC deposit is anchored to the payout;
-  any residual vs the orders-derived collection lands on Over/Short (the pipeline
-  gates |over_short| > $25 to 'review').
+PAYOUT-ANCHORED (everbean-two-batch-tender-split-spec.md + Aug-6 reconciliation):
+the card batch is defined by the Square PAYOUT that settles the day, not by a
+midnight-to-midnight order window. This is the fix for the Aug-6 miss:
+
+  * DEPOSIT is the payout's `amount_money` (authoritative, exact).
+  * FEES = every fee the payout deducts: each CHARGE entry's `fee_amount_money`
+    PLUS separate fee entries such as `GIFT_CARD_LOAD_FEE` (the $2.50 the old
+    code silently dropped because it only summed charge fees).
+  * REFUNDS = the payout's REFUND entries (the $27.00 the old code never modeled).
+  * The CARD SALES BREAKDOWN is taken from exactly the payments that settled in
+    that payout (anchor by `payment_id`), so there is no order-window mismatch —
+    the batch ties to the penny by construction (Over/Short -> 0). Any settlement
+    the payout deducts that we can't classify falls to Over/Short, which the
+    pipeline gate routes to human review rather than silently drafting.
+
+Cash never settles through a payout (no Square fees), so the cash batch is the
+day's CASH tenders, self-anchored (deposit = cash collected). Gift-card
+redemptions are folded into the card batch with an offsetting gift-card-liability
+draw (revenue-neutral to the bank), summed from the SQUARE_GIFT_CARD tenders and
+cross-checked against GiftCardActivities.
 
 `aggregate_day` is a pure function (raw API dicts -> DailyBatches) so it can be
 unit-tested offline; `SquareSource.pull_day` does the live paginated fetches.
 """
 from __future__ import annotations
 from decimal import Decimal
+import datetime
 import requests
 from .domain import DailyBatches, Batch
 
@@ -24,15 +35,27 @@ CARD_TENDERS = {"CARD", "SQUARE_GIFT_CARD"}
 
 
 # ----------------------------- pure aggregation -----------------------------
-def aggregate_day(business_date: str, orders: list, payout_fees_cents: int,
-                  payout_deposit_cents: int, gc_redemptions_cents: int | None = None,
+def aggregate_day(business_date: str, orders: list, card_payment_ids,
+                  payout_deposit_cents: int, payout_fees_cents: int,
+                  payout_refunds_cents: int = 0, gc_redemptions_cents: int | None = None,
                   reporting_discount_cents: int | None = None) -> DailyBatches:
-    """orders: list of Square order dicts. payout_*: authoritative from the payout
-    (card fees, card net deposit). gc_redemptions_cents: from GiftCardActivities
-    (optional cross-check; falls back to the SQUARE_GIFT_CARD tender sum).
-    reporting_discount_cents: the AUTHORITATIVE day discount from the reporting
-    Sales view (Order.total_discount_money is unreliable — spec §discounts); when
-    given it overrides the order-level discount, allocated by net-sales share."""
+    """Build the two-batch day from orders + the authoritative payout figures.
+
+    orders: Square order dicts for the reporting day (with `tenders`).
+    card_payment_ids: the set of payment_ids that SETTLED in the day's payout —
+        the card batch counts ONLY card tenders whose payment_id is in this set,
+        anchoring the card sales to the payout (no order-window drift).
+    payout_deposit_cents / payout_fees_cents / payout_refunds_cents: authoritative
+        from the payout decomposition (deposit, all fees incl. gift-card load,
+        refunds paid back out).
+    gc_redemptions_cents: GiftCardActivities REDEEM total (cross-check only; the
+        batch uses the SQUARE_GIFT_CARD tender sum so the fold stays internally
+        consistent and Over/Short is not disturbed by a labeling difference).
+    reporting_discount_cents: authoritative day discount from the reporting Sales
+        view; when given, overrides the (unreliable) order-level discount total,
+        allocated across the two batches by net-sales share.
+    """
+    card_ids = set(card_payment_ids or ())
     cc = dict(net=0, tax=0, tips=0, gc_sold=0, disc=0)
     cash = dict(net=0, tax=0, tips=0, gc_sold=0, disc=0)
     redeemed = 0
@@ -54,27 +77,35 @@ def aggregate_day(business_date: str, orders: list, payout_fees_cents: int,
             amt = (t.get("amount_money") or {}).get("amount", 0)
             if amt <= 0:
                 continue
+            ttype = t.get("type")
+            # ---- bucket selection (payout anchor for card) ----
+            if ttype == "CARD":
+                pid = t.get("payment_id") or t.get("id")
+                if card_ids and pid not in card_ids:
+                    continue  # settled in a different payout / day — not this batch
+                b = cc
+            elif ttype == "SQUARE_GIFT_CARD":
+                b = cc                                   # redemption, folded into card batch
+            elif ttype == "CASH":
+                b = cash
+            else:
+                continue                                 # other tenders not modeled
+
             tip = (t.get("tip_money") or {}).get("amount", 0)
             w = Decimal(amt) / Decimal(tot)
             tax_a = int((Decimal(tax) * w).quantize(Decimal("1")))
             gc_a = int((Decimal(gc_sold) * w).quantize(Decimal("1")))
             disc_a = int((Decimal(disc) * w).quantize(Decimal("1")))
-            net = amt - tip - tax_a - gc_a          # net product sales (post-discount)
-            b = cc if t.get("type") in CARD_TENDERS else (cash if t.get("type") == "CASH" else None)
-            if b is None:
-                continue
+            net = amt - tip - tax_a - gc_a               # net product sales (post-discount)
             b["net"] += net
             b["tax"] += tax_a
             b["gc_sold"] += gc_a
             b["disc"] += disc_a
-            if b is cc and t.get("type") == "CARD":
-                b["tips"] += tip                     # card tips only; cash tips excluded
-            if t.get("type") == "SQUARE_GIFT_CARD":
+            if b is cc and ttype == "CARD":
+                b["tips"] += tip                         # card tips only; cash tips excluded
+            if ttype == "SQUARE_GIFT_CARD":
                 b["tips"] += tip
-                redeemed += amt
-
-    if gc_redemptions_cents is not None:
-        redeemed = gc_redemptions_cents
+                redeemed += amt                          # gift-card tender = redemption draw
 
     # Authoritative discount from reporting overrides the unreliable order-level
     # total, allocated across the two batches by net-sales share (spec §discounts).
@@ -84,22 +115,22 @@ def aggregate_day(business_date: str, orders: list, payout_fees_cents: int,
             cc["disc"] = int(round(reporting_discount_cents * cc["net"] / total_net))
             cash["disc"] = reporting_discount_cents - cc["disc"]
 
-    def mk(b, deposit_cents, fees_cents, is_cc):
-        gross = b["net"] + b["disc"]                 # gross = net + discount
+    def mk(b, deposit_cents, fees_cents, refunds_cents, redemptions_cents):
+        gross = b["net"] + b["disc"]                     # gross = net + discount
         batch = Batch(
             gross=C(gross), discounts=C(-b["disc"]), tax=C(b["tax"]), tips=C(b["tips"]),
             gift_cards_sold=C(b["gc_sold"]),
-            gift_card_redemptions=C(redeemed) if is_cc else Decimal("0"),
-            fees=C(fees_cents), deposit=C(deposit_cents))
-        # anchor deposit to the authoritative figure; residual -> over/short
+            gift_card_redemptions=C(redemptions_cents),
+            fees=C(fees_cents), refunds=C(refunds_cents), deposit=C(deposit_cents))
+        # anchor deposit to the authoritative payout figure; residual -> Over/Short
         batch.over_short = batch.deposit - batch.implied_deposit()
         return batch
 
     cash_deposit = cash["net"] + cash["disc"] + cash["tax"] + cash["gc_sold"]  # cash collected
     return DailyBatches(
         business_date,
-        cc=mk(cc, payout_deposit_cents, payout_fees_cents, is_cc=True),
-        cash=mk(cash, cash_deposit, 0, is_cc=False),
+        cc=mk(cc, payout_deposit_cents, payout_fees_cents, payout_refunds_cents, redeemed),
+        cash=mk(cash, cash_deposit, 0, 0, 0),
     )
 
 
@@ -115,7 +146,8 @@ class SquareApi:
         out, cursor = [], None
         while True:
             if method == "POST":
-                b = dict(body or {}); b["cursor"] = cursor
+                b = dict(body or {})
+                if cursor: b["cursor"] = cursor
                 r = requests.post(f"{self.base}{path}", headers=self.h, json=b, timeout=60)
             else:
                 p = dict(params or {})
@@ -135,7 +167,8 @@ class SquareApi:
 
     def payouts(self, location_id, begin_iso, end_iso):
         return self._paged("GET", "/v2/payouts", "payouts",
-                           params={"location_id": location_id, "begin_time": begin_iso, "end_time": end_iso})
+                           params={"location_id": location_id, "begin_time": begin_iso,
+                                   "end_time": end_iso, "sort_order": "ASC"})
 
     def payout_entries(self, payout_id):
         return self._paged("GET", f"/v2/payouts/{payout_id}/payout-entries", "payout_entries")
@@ -145,9 +178,42 @@ class SquareApi:
                            params={"type": "REDEEM", "begin_time": begin_iso, "end_time": end_iso})
 
 
+def decompose_payouts(payouts: list, entries_by_id: dict) -> dict:
+    """Turn selected payouts + their entries into the authoritative settlement
+    figures. Returns cents: deposit, fees (all fee deductions), refunds, and the
+    set of card payment_ids that settled here (the card-batch anchor).
+
+    Classification is conservative: CHARGE fees and any *FEE* entry (e.g.
+    GIFT_CARD_LOAD_FEE) are fees; REFUND entries are refunds; anything else is
+    left unclassified so it surfaces as Over/Short for review instead of being
+    silently mislabeled as a fee."""
+    deposit = fees = refunds = 0
+    card_payment_ids = set()
+    unclassified = []
+    for p in payouts:
+        deposit += (p.get("amount_money") or {}).get("amount", 0)
+        for e in entries_by_id.get(p["id"], []):
+            t = e.get("type", "")
+            net = (e.get("net_amount_money") or {}).get("amount", 0)
+            fee = (e.get("fee_amount_money") or {}).get("amount", 0)
+            if t == "CHARGE":
+                fees += fee
+                pid = (e.get("type_charge_details") or {}).get("payment_id")
+                if pid:
+                    card_payment_ids.add(pid)
+            elif t == "REFUND":
+                refunds += -net                     # net is negative
+            elif "FEE" in t:
+                fees += -net                         # GIFT_CARD_LOAD_FEE etc. (net negative)
+            else:
+                unclassified.append({"type": t, "net": net})
+    return {"deposit": deposit, "fees": fees, "refunds": refunds,
+            "card_payment_ids": card_payment_ids, "unclassified": unclassified}
+
+
 class SampleSource:
     """Offline fallback (no Square token available, e.g. local dev/demo). Returns
-    the validated Aug-4 two-batch sample so the pipeline can run end to end."""
+    a validated two-batch sample so the pipeline can run end to end."""
     _SAMPLES = {
         "2026-08-04": {
             "cc":   {"gross": "1800.23", "discounts": "-10.05", "tax": "80.39", "tips": "260.48",
@@ -176,30 +242,71 @@ class SampleSource:
 
 class SquareSource:
     """Live source. Needs the tenant's Square access token + location (from the
-    Connection). Selects the payout covering the day, decomposes it for the
-    authoritative fees + card deposit, and returns the two-batch DailyBatches."""
+    Connection). Selects the payout that settles the day, decomposes it for the
+    authoritative deposit / fees / refunds + the card anchor, and returns the
+    two-batch DailyBatches. Exposes `last_meta` so the pipeline can surface why a
+    day didn't reconcile."""
     def __init__(self, conn, access_token: str):
         self.location = conn.realm_or_location
         self.api = SquareApi(access_token, env=conn.environment)
+        self.last_meta: dict = {}
+
+    def _local_dt(self, iso_z: str, tz_offset: str):
+        """Parse an RFC3339 (Zulu) timestamp and shift into the location's local
+        offset for date bucketing."""
+        s = iso_z.replace("Z", "+00:00")
+        dt = datetime.datetime.fromisoformat(s)
+        sign = 1 if tz_offset[0] == "+" else -1
+        oh, om = int(tz_offset[1:3]), int(tz_offset[4:6])
+        return dt + datetime.timedelta(hours=sign * oh, minutes=sign * om)
+
+    def _select_payouts(self, business_date, tz_offset):
+        """The payout that settles `business_date` is the daily BATCH payout created
+        around its close: local(created_at) in [date 12:00, date+1 12:00). This
+        deterministically excludes the prior day's early-morning payout and the
+        next day's evening payout."""
+        y, m, d = map(int, business_date.split("-"))
+        day = datetime.date(y, m, d)
+        nxt = day + datetime.timedelta(days=1)
+        # widen the API window a little around the day to be safe, then filter by created_at
+        begin = f"{(day - datetime.timedelta(days=1)).isoformat()}T00:00:00{tz_offset}"
+        end = f"{(nxt + datetime.timedelta(days=1)).isoformat()}T00:00:00{tz_offset}"
+        lo = datetime.datetime.combine(day, datetime.time(12, 0))
+        hi = datetime.datetime.combine(nxt, datetime.time(12, 0))
+        selected = []
+        for p in self.api.payouts(self.location, begin, end):
+            if p.get("type") and p["type"] != "BATCH":
+                continue
+            created = self._local_dt(p["created_at"], tz_offset).replace(tzinfo=None)
+            if lo <= created < hi:
+                selected.append(p)
+        return selected
 
     def pull_day(self, business_date: str, tz_offset: str = "-06:00") -> DailyBatches:
         start = f"{business_date}T00:00:00{tz_offset}"
-        # end of local day
         y, m, d = map(int, business_date.split("-"))
-        import datetime
         nxt = (datetime.date(y, m, d) + datetime.timedelta(days=1)).isoformat()
         end = f"{nxt}T00:00:00{tz_offset}"
 
+        payouts = self._select_payouts(business_date, tz_offset)
+        entries_by_id = {p["id"]: self.api.payout_entries(p["id"]) for p in payouts}
+        settle = decompose_payouts(payouts, entries_by_id)
+
         orders = self.api.orders(self.location, start, end)
-        # payout covering the day: pick the one whose entries fall in-window (simplify:
-        # the payout created that evening). Fully paginate entries for exact fees + net.
-        payouts = self.api.payouts(self.location, start, f"{nxt}T23:59:59{tz_offset}")
-        fees = deposit = 0
-        for p in payouts:
-            entries = self.api.payout_entries(p["id"])
-            fees += sum((e.get("fee_amount_money") or {}).get("amount", 0) for e in entries)
-            deposit += (p.get("amount_money") or {}).get("amount", 0)
         redemptions = sum((a.get("redeem_activity_details") or {}).get("amount_money", {}).get("amount", 0)
                           for a in self.api.gift_redemptions(start, end)
                           if (a.get("redeem_activity_details") or {}).get("status") == "COMPLETED")
-        return aggregate_day(business_date, orders, fees, deposit, redemptions or None)
+
+        db = aggregate_day(business_date, orders, settle["card_payment_ids"],
+                           settle["deposit"], settle["fees"], settle["refunds"],
+                           gc_redemptions_cents=redemptions or None)
+
+        self.last_meta = {
+            "payouts": [p["id"] for p in payouts],
+            "deposit_cents": settle["deposit"], "fees_cents": settle["fees"],
+            "refunds_cents": settle["refunds"], "n_charges": len(settle["card_payment_ids"]),
+            "redemptions_cents": redemptions, "n_orders": len(orders),
+            "unclassified": settle["unclassified"],
+            "no_payout": not payouts,
+        }
+        return db

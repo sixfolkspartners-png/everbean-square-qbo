@@ -88,7 +88,7 @@ class QboDestination:
         if b.gift_card_redemptions:
             lines.append(self._dr("gift_card_liability", b.gift_card_redemptions, "Gift card redemptions"))
         if b.over_short:
-            (self._cr if b.over_short > 0 else self._dr)("over_short", abs(b.over_short), "Over and short")
+            lines.append((self._cr if b.over_short > 0 else self._dr)("over_short", abs(b.over_short), "Over and short"))
         return {"DocNumber": f"SQ-{day.replace('-','')}-CC", "TxnDate": day,
                 "PrivateNote": f"DailyLedger CARD batch {day}", "Line": lines}
 
@@ -100,7 +100,7 @@ class QboDestination:
         if b.discounts:
             lines.append(self._dr("discounts", -b.discounts, "Discounts"))
         if b.over_short:
-            (self._cr if b.over_short > 0 else self._dr)("over_short", abs(b.over_short), "Over and short")
+            lines.append((self._cr if b.over_short > 0 else self._dr)("over_short", abs(b.over_short), "Over and short"))
         return {"DocNumber": f"SQ-{day.replace('-','')}-CASH", "TxnDate": day,
                 "PrivateNote": f"DailyLedger CASH batch {day}", "Line": lines}
 

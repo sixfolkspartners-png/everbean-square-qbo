@@ -5,7 +5,7 @@ The reconcile gate enforces the hard rule: each batch must tie to its deposit to
 the penny, else it is flagged 'review' and NOT posted.
 """
 from __future__ import annotations
-import json, secrets
+import os, json, secrets
 from decimal import Decimal
 from . import vault
 from .models import Org, Connection, SyncRun, Approval
@@ -13,6 +13,11 @@ from .square_source import SquareSource, SampleSource
 from .qbo import QboDestination
 
 TOL = Decimal("0.005")
+# The over/short plug absorbs the residual between the order-derived collection and
+# the authoritative payout. Tiny = rounding (fine). A large plug means real events
+# (refunds, uncaptured fees, unsettled auths) aren't modeled yet, so the day is
+# flagged for human review instead of auto-drafting. Tune via env.
+OVER_SHORT_LIMIT = Decimal(os.environ.get("OVER_SHORT_LIMIT", "5"))
 
 
 def _conn(session, org_id, provider):
@@ -42,7 +47,8 @@ def run_day(session, org_id: int, business_date: str) -> dict:
     for batch_name, batch in (("cc", db.cc), ("cash", db.cash)):
         # reconcile gate: computed deposit must tie to the source deposit
         implied = batch.implied_deposit()
-        tie_ok = abs(implied - batch.deposit) <= TOL
+        tie_ok = abs(implied - batch.deposit) <= TOL          # plug makes this hold; sanity check
+        plug_ok = abs(batch.over_short) <= OVER_SHORT_LIMIT   # the plug itself must be small
         run = (session.query(SyncRun)
                .filter_by(org_id=org_id, business_date=business_date, batch=batch_name).first())
         if not run:
@@ -50,11 +56,13 @@ def run_day(session, org_id: int, business_date: str) -> dict:
             session.add(run)
         run.deposit = str(batch.deposit)
 
-        if not tie_ok:
+        if not (tie_ok and plug_ok):
+            reason = "did_not_reconcile" if not tie_ok else "over_short_exceeds_limit"
             run.status = "review"
-            run.detail_json = json.dumps({"reason": "did_not_reconcile",
-                                          "implied": str(implied), "deposit": str(batch.deposit)})
-            results[batch_name] = {"status": "review", "implied": str(implied), "deposit": str(batch.deposit)}
+            run.detail_json = json.dumps({"reason": reason, "implied": str(implied),
+                                          "deposit": str(batch.deposit), "over_short": str(batch.over_short)})
+            results[batch_name] = {"status": "review", "reason": reason,
+                                   "over_short": str(batch.over_short), "deposit": str(batch.deposit)}
             continue
 
         body = dest.build_cc_je(business_date, batch) if batch_name == "cc" else dest.build_cash_je(business_date, batch)

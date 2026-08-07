@@ -32,6 +32,6 @@ class SQUARE:
     CLIENT_ID = os.environ.get("SQUARE_APP_CLIENT_ID", "")
     CLIENT_SECRET = os.environ.get("SQUARE_APP_CLIENT_SECRET", "")
     REDIRECT_URI = os.environ.get("SQUARE_APP_REDIRECT_URI", "http://localhost:8000/callback/square")
-    SCOPE = "ORDERS_READ PAYMENTS_READ GIFTCARDS_READ MERCHANT_PROFILE_READ SETTLEMENTS_READ"
+    SCOPE = "ORDERS_READ PAYMENTS_READ GIFTCARDS_READ MERCHANT_PROFILE_READ SETTLEMENTS_READ REPORTING_READ"
     AUTHORIZE = ("https://connect.squareup.com/oauth2/authorize" if ENV == "production"
                  else "https://connect.squareupsandbox.com/oauth2/authorize")

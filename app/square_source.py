@@ -25,13 +25,55 @@ cross-checked against GiftCardActivities.
 unit-tested offline; `SquareSource.pull_day` does the live paginated fetches.
 """
 from __future__ import annotations
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 import datetime
 import requests
 from .domain import DailyBatches, Batch
 
 C = lambda cents: Decimal(cents) / 100
+D = lambda x: Decimal(str(x))
+Q2 = lambda x: Decimal(x).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 CARD_TENDERS = {"CARD", "SQUARE_GIFT_CARD"}
+
+
+# ------------------ authoritative reporting-anchored build ------------------
+def build_from_reporting(business_date: str, sales: dict, deposit: Decimal, fees: Decimal,
+                         refunds: Decimal, redemptions: Decimal) -> DailyBatches:
+    """Build the two-batch day from Square's AUTHORITATIVE Reporting Sales Summary
+    (matches the seller's dashboard to the penny) + the payout settlement figures.
+
+    `sales`: the Reporting `Sales.*` measures for the reporting day, in DOLLARS.
+    `deposit`/`fees`/`refunds`/`redemptions`: DOLLARS from the payout decomposition +
+    GiftCardActivities. The card batch is anchored to the payout deposit; the cash
+    batch is split off by its share of collected (net + tax) — a presentation split
+    only, since both batches post to the same GL accounts and the two batches' totals
+    equal the dashboard exactly. Gift-card-funded sales are already inside the
+    authoritative gross/tax, so redemptions post as a gift-card-liability draw and the
+    card batch ties to the payout (residual = Square's cash-rounding, absorbed by
+    Over/Short)."""
+    money = lambda k: D(sales.get(k, 0) or 0)
+    G = Q2(money("Sales.top_line_product_sales"))          # gross product sales
+    disc = Q2(abs(money("Sales.discounts_amount")))        # magnitude (stored negative)
+    tax = Q2(money("Sales.sales_tax_amount"))
+    tips = Q2(money("Sales.tips_amount"))                  # non-cash tips (cash tips excluded)
+    gc_sold = Q2(money("Sales.gift_card_sales_amount"))
+    net = Q2(money("Sales.net_sales"))
+    cash_coll = Q2(money("Sales.cash_collected"))
+
+    denom = net + tax
+    share = (cash_coll / denom) if denom > 0 else Decimal("0")
+    cash_tax = Q2(tax * share)
+    cash_disc = Q2(disc * share)
+    cash_gross = Q2(cash_coll - cash_tax + cash_disc)      # cash ties to its deposit by construction
+
+    cc = Batch(gross=G - cash_gross, discounts=-(disc - cash_disc), tax=tax - cash_tax,
+               tips=tips, gift_cards_sold=gc_sold, gift_card_redemptions=redemptions,
+               fees=fees, refunds=refunds, deposit=deposit)
+    cc.over_short = Q2(cc.deposit - cc.implied_deposit())
+
+    cash = Batch(gross=cash_gross, discounts=-cash_disc, tax=cash_tax, deposit=cash_coll)
+    cash.over_short = Q2(cash.deposit - cash.implied_deposit())
+    return DailyBatches(business_date, cc=cc, cash=cash)
 
 
 # ----------------------------- pure aggregation -----------------------------
@@ -177,6 +219,31 @@ class SquareApi:
         return self._paged("GET", "/v2/gift-cards/activities", "gift_card_activities",
                            params={"type": "REDEEM", "begin_time": begin_iso, "end_time": end_iso})
 
+    # ---- Reporting API (Cube): authoritative Sales Summary, matches the dashboard ----
+    SALES_MEASURES = ["Sales.top_line_product_sales", "Sales.net_sales", "Sales.discounts_amount",
+                      "Sales.sales_tax_amount", "Sales.tips_amount", "Sales.gift_card_sales_amount",
+                      "Sales.refunds_by_amount_amount", "Sales.total_collected_amount",
+                      "Sales.cash_collected", "Sales.order_count"]
+
+    def reporting_load(self, query: dict) -> dict:
+        r = requests.post(f"{self.base}/reporting/v1/load", headers=self.h,
+                          json={"query": query}, timeout=60)
+        if r.status_code == 403:
+            raise PermissionError("REPORTING_READ scope missing — reconnect Square to grant Reporting access")
+        r.raise_for_status()
+        return r.json()
+
+    def sales_summary(self, location_id: str, business_date: str) -> dict:
+        """One authoritative Sales-Summary row for the seller's reporting day (uses
+        Square's configured reporting-day boundary, e.g. 5:30 AM — the same basis as
+        the dashboard), so gross/discounts/tax/tips match the dashboard to the penny."""
+        q = {"measures": self.SALES_MEASURES,
+             "timeDimensions": [{"dimension": "Sales.reporting_day",
+                                 "dateRange": [business_date, business_date]}],
+             "filters": [{"member": "Sales.location_id", "operator": "equals", "values": [location_id]}]}
+        rows = self.reporting_load(q).get("data", [])
+        return rows[0] if rows else {}
+
 
 def decompose_payouts(payouts: list, entries_by_id: dict) -> dict:
     """Turn selected payouts + their entries into the authoritative settlement
@@ -288,25 +355,31 @@ class SquareSource:
         nxt = (datetime.date(y, m, d) + datetime.timedelta(days=1)).isoformat()
         end = f"{nxt}T00:00:00{tz_offset}"
 
+        # settlement (authoritative deposit / fees / refunds) from the day's payout
         payouts = self._select_payouts(business_date, tz_offset)
         entries_by_id = {p["id"]: self.api.payout_entries(p["id"]) for p in payouts}
         settle = decompose_payouts(payouts, entries_by_id)
 
-        orders = self.api.orders(self.location, start, end)
+        # gift-card redemptions (revenue already inside the authoritative gross)
         redemptions = sum((a.get("redeem_activity_details") or {}).get("amount_money", {}).get("amount", 0)
                           for a in self.api.gift_redemptions(start, end)
                           if (a.get("redeem_activity_details") or {}).get("status") == "COMPLETED")
 
-        db = aggregate_day(business_date, orders, settle["card_payment_ids"],
-                           settle["deposit"], settle["fees"], settle["refunds"],
-                           gc_redemptions_cents=redemptions or None)
+        # AUTHORITATIVE sales breakdown from Square's Reporting Sales Summary (matches
+        # the dashboard); requires the REPORTING_READ scope (raises PermissionError if
+        # the tenant hasn't reconnected Square to grant it).
+        sales = self.api.sales_summary(self.location, business_date)
+
+        db = build_from_reporting(business_date, sales,
+                                  C(settle["deposit"]), C(settle["fees"]),
+                                  C(settle["refunds"]), C(redemptions))
 
         self.last_meta = {
             "payouts": [p["id"] for p in payouts],
             "deposit_cents": settle["deposit"], "fees_cents": settle["fees"],
             "refunds_cents": settle["refunds"], "n_charges": len(settle["card_payment_ids"]),
-            "redemptions_cents": redemptions, "n_orders": len(orders),
-            "unclassified": settle["unclassified"],
-            "no_payout": not payouts,
+            "redemptions_cents": redemptions, "unclassified": settle["unclassified"],
+            "no_payout": not payouts, "source": "reporting",
+            "reporting": {k: sales.get(k) for k in SquareApi.SALES_MEASURES},
         }
         return db

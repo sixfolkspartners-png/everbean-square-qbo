@@ -2,43 +2,103 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Review — DailyLedger</title>
 <style>
 :root{--ink:#0b0b0b;--ink2:#52514e;--muted:#8a8a84;--line:#e6e6e4;--good:#0a7a15;--good-bg:#e8f6e8;
---warn:#b7791f;--warn-bg:#fdf3dd;--crit:#d03b3b;--page:#f4f4f2;--card:#fff;--accent:#1c5cab}
+--warn:#b7791f;--warn-bg:#fdf3dd;--warn-line:#f0dca8;--crit:#d03b3b;--crit-bg:#fdecec;--page:#f4f4f2;--card:#fff;--accent:#1c5cab}
 *{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--ink);
 font:14px/1.5 -apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;padding:26px}
 .wrap{max-width:720px;margin:0 auto}
-h1{font-size:20px;margin:0 0 2px}.sub{color:var(--ink2);margin:0 0 18px;font-size:13px}
+a.back{color:var(--accent);text-decoration:none;font-size:13px}
+h1{font-size:20px;margin:6px 0 2px}.sub{color:var(--ink2);margin:0 0 18px;font-size:13px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:14px;
 box-shadow:0 1px 2px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.04)}
+.card.flag{border-color:var(--warn-line)}
 .bt{font-size:15px;font-weight:700;margin-bottom:2px}.bmeta{color:var(--muted);font-size:12px;margin-bottom:10px}
 table{width:100%;border-collapse:collapse;font-size:13px}
 td{padding:5px 6px;border-bottom:1px solid #f0f0ee}
 .dr{color:var(--ink)}.cr{color:var(--ink2)}
 .amt{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.os td{background:var(--warn-bg);font-weight:600}
 .tot td{border-top:1px solid var(--ink);font-weight:700;padding-top:8px}
-.pill{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:6px}
+.pill{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:6px;margin-left:4px}
 .ok{background:var(--good-bg);color:var(--good)}.warn{background:var(--warn-bg);color:var(--warn)}
+.crit{background:var(--crit-bg);color:var(--crit)}
+.var{background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:10px;padding:12px 14px;margin:6px 0 12px}
+.var h4{margin:0 0 6px;font-size:13px;color:#8a5a0b}
+.vgrid{display:grid;grid-template-columns:auto auto;gap:2px 16px;font-size:12.5px;color:var(--ink2);margin:6px 0 0}
+.vgrid b{color:var(--ink);font-variant-numeric:tabular-nums}
+.resolve{margin-top:10px;padding-top:10px;border-top:1px dashed var(--warn-line)}
+.resolve label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:#8a5a0b;font-weight:700;margin:6px 0 3px}
+.resolve select,.resolve input{width:100%;padding:8px;border:1px solid var(--warn-line);border-radius:8px;font:inherit;background:#fff}
+.resolve .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.resolve .row>div{flex:1;min-width:180px}
+.stage{background:#8a5a0b;color:#fff;border:0;border-radius:8px;padding:9px 16px;font:inherit;font-weight:600;cursor:pointer;white-space:nowrap}
 .actions{display:flex;gap:10px;margin-top:8px}
 button{font:inherit;font-weight:600;border:0;border-radius:9px;padding:10px 20px;cursor:pointer}
-.approve{background:#0a7a15;color:#fff}.reject{background:#fff;border:1px solid var(--line);color:var(--ink2)}
+.approve{background:#0a7a15;color:#fff}.approve:disabled{background:#b9c7ba;cursor:not-allowed}
+.reject{background:#fff;border:1px solid var(--line);color:var(--ink2)}
 .banner{border-radius:10px;padding:12px 16px;font-weight:600;margin-bottom:16px}
 .banner.posted{background:var(--good-bg);color:var(--good)}.banner.rejected{background:#fdeaea;color:var(--crit)}
+.note{font-size:12px;color:var(--muted);margin-top:10px}
 </style></head><body><div class="wrap">
+<a class="back" href="/">&larr; Dashboard</a>
 <h1>{{ org.name }} — {{ appr.business_date }}</h1>
-<p class="sub">Proposed QuickBooks journal entries · review before posting</p>
+<p class="sub">Proposed QuickBooks journal entries · reconciled to the Square payout before posting</p>
 
-{% if appr.status == 'posted' %}<div class="banner posted">✓ Approved and posted to QuickBooks.</div>
+{% if appr.status == 'posted' %}<div class="banner posted">&#10003; Approved and posted to QuickBooks.</div>
 {% elif appr.status == 'rejected' %}<div class="banner rejected">Rejected — nothing was posted.</div>{% endif %}
 
+{% set ns = namespace(has_review=false) %}
 {% for d in drafts %}
-<div class="card">
+{% if d.status == 'review' %}{% set ns.has_review = true %}{% endif %}
+<div class="card {{ 'flag' if d.status=='review' else '' }}">
   <div class="bt">{{ 'Credit card batch' if d.batch=='cc' else 'Cash batch' }}
-    <span class="pill {{ 'ok' if d.balanced else 'warn' }}">{{ 'balanced' if d.balanced else 'UNBALANCED' }}</span>
-    <span class="pill {{ 'ok' if d.status in ('drafted','posted') else 'warn' }}">{{ d.status }}</span></div>
+    <span class="pill {{ 'ok' if d.balanced else 'crit' }}">{{ 'balanced' if d.balanced else 'UNBALANCED' }}</span>
+    <span class="pill {{ 'ok' if d.status in ('drafted','posted') else ('warn' if d.status=='review' else 'crit' if d.status=='rejected' else 'warn') }}">{{ d.status }}</span></div>
   <div class="bmeta">{{ d.doc }} · deposit ${{ d.deposit }}</div>
+
+  {% if d.status == 'review' %}
+  <div class="var">
+    <h4>&#9888; Did not reconcile automatically — needs your review</h4>
+    <div>Over/Short after anchoring to the Square payout:
+      <b style="color:{{ '#b42318' }}">${{ '%.2f'|format(d.over_short|abs) }}
+      {{ '(short)' if d.over_short < 0 else '(over)' if d.over_short > 0 else '' }}</b>.
+      Reason: {{ 'the computed deposit does not tie to the payout' if d.reason=='did_not_reconcile' else 'the Over/Short plug is larger than the allowed limit' }}.</div>
+    <div class="vgrid">
+      <span>Payout deposit</span><b>${{ d.variance.get('deposit','?') }}</b>
+      <span>Implied from sales</span><b>${{ d.variance.get('implied','?') }}</b>
+      <span>Fees (proc + load)</span><b>${{ d.variance.get('fees','0') }}</b>
+      <span>Refunds</span><b>${{ d.variance.get('refunds','0') }}</b>
+      <span>Gift-card redemptions</span><b>${{ d.variance.get('redemptions','0') }}</b>
+      {% if d.meta.get('payouts') %}<span>Payout(s)</span><b style="font-size:11px">{{ d.meta.get('payouts')|join(', ') }}</b>{% endif %}
+      {% if d.meta.get('no_payout') %}<span>Payout</span><b style="color:#b42318">none found for this day</b>{% endif %}
+      {% if d.meta.get('unclassified') %}<span>Unclassified entries</span><b style="color:#b42318">{{ d.meta.get('unclassified')|length }}</b>{% endif %}
+    </div>
+    {% if appr.status == 'pending' %}
+    <form class="resolve" method="post" action="/adjust/{{ appr.token }}">
+      <input type="hidden" name="batch" value="{{ d.batch }}">
+      <div class="row">
+        <div>
+          <label>Book the ${{ '%.2f'|format(d.over_short|abs) }} residual to</label>
+          <select name="account_key">
+            {% for a in accounts %}<option value="{{ a.key }}"{{ ' selected' if a.key=='over_short' else '' }}>{{ a.label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>Memo (optional)</label>
+          <input type="text" name="memo" placeholder="e.g. unmodeled adjustment — reviewed">
+        </div>
+        <button class="stage" type="submit">Book &amp; stage &rarr;</button>
+      </div>
+      <div class="note">The amount comes straight from the authoritative Square payout and can't be edited here — you choose where it posts. Staging makes it approvable below.</div>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <table>
     {% for l in d.lines %}
-    <tr><td class="{{ 'dr' if l.type=='Debit' else 'cr' }}">{{ l.type }} — {{ l.desc }}</td>
-        <td class="amt">${{ '%.2f'|format(l.amount) }}</td></tr>
+    <tr class="{{ 'os' if l.desc.startswith('Over and short') else '' }}">
+      <td class="{{ 'dr' if l.type=='Debit' else 'cr' }}">{{ l.type }} — {{ l.desc }}</td>
+      <td class="amt">${{ '%.2f'|format(l.amount) }}</td></tr>
     {% endfor %}
     <tr class="tot"><td>Debits / Credits</td><td class="amt">${{ '%.2f'|format(d.debit) }} / ${{ '%.2f'|format(d.credit) }}</td></tr>
   </table>
@@ -47,8 +107,10 @@ button{font:inherit;font-weight:600;border:0;border-radius:9px;padding:10px 20px
 
 {% if appr.status == 'pending' %}
 <div class="actions">
-  <form method="post" action="/approve/{{ appr.token }}"><button class="approve">Approve &amp; post to QuickBooks</button></form>
+  <form method="post" action="/approve/{{ appr.token }}">
+    <button class="approve"{{ ' disabled' if ns.has_review else '' }}>Approve &amp; post to QuickBooks</button></form>
   <form method="post" action="/reject/{{ appr.token }}"><button class="reject">Reject</button></form>
 </div>
+{% if ns.has_review %}<p class="note">Resolve the flagged batch above (book its residual) before you can post — nothing is posted until every batch reconciles or is reviewed.</p>{% endif %}
 {% endif %}
 </div></body></html>
